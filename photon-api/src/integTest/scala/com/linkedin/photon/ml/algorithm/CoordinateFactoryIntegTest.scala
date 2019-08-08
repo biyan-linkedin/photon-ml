@@ -79,6 +79,7 @@ class CoordinateFactoryIntegTest extends SparkTestUtils {
     val optimizationConfiguration = RandomEffectOptimizationConfiguration(OPTIMIZER_CONFIG)
 
     doReturn(sc).when(mockDataset).sparkContext
+    doReturn(sc).when(mockProjectorsRDD).sparkContext
     doReturn(mockDataRDD).when(mockDataset).activeData
     doReturn(mockDataRDD)
       .when(mockDataRDD)
