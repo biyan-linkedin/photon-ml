@@ -43,6 +43,14 @@
                 "string"
              ],
             "doc": "The loss function used for training as the class name. E.g.: com.linkedin.photon.ml.function.LogisticLossFunction"
+        },
+        {
+            "default": null,
+            "name": "hessianMatrix",
+            "type": [
+                //todo
+            ],
+            "doc": "The Hessian Matrix if any"
         }
     ]
 }

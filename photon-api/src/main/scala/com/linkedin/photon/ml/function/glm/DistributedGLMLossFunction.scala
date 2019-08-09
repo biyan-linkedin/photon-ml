@@ -17,12 +17,12 @@ package com.linkedin.photon.ml.function.glm
 import breeze.linalg._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-
 import com.linkedin.photon.ml.data.LabeledPoint
 import com.linkedin.photon.ml.function._
 import com.linkedin.photon.ml.normalization.NormalizationContext
 import com.linkedin.photon.ml.optimization.RegularizationType
 import com.linkedin.photon.ml.optimization.game.GLMOptimizationConfiguration
+import com.linkedin.photon.ml.supervised.model.GeneralizedLinearModel
 import com.linkedin.photon.ml.util.BroadcastWrapper
 
 /**
@@ -160,20 +160,31 @@ object DistributedGLMLossFunction {
   def apply(
       configuration: GLMOptimizationConfiguration,
       singleLossFunction: PointwiseLossFunction,
-      treeAggregateDepth: Int): DistributedGLMLossFunction = {
+      treeAggregateDepth: Int,
+      priorGeneralizedLinearModel: GeneralizedLinearModel,
+      isIncrementalTrainingEnabled: Boolean): DistributedGLMLossFunction = {
 
     val regularizationContext = configuration.regularizationContext
     val regularizationWeight = configuration.regularizationWeight
 
-    regularizationContext.regularizationType match {
-      case RegularizationType.L2 | RegularizationType.ELASTIC_NET =>
-        new DistributedGLMLossFunction(singleLossFunction, treeAggregateDepth)
-          with L2RegularizationTwiceDiff {
+    if (isIncrementalTrainingEnabled) {
+      new DistributedGLMLossFunction(singleLossFunction, treeAggregateDepth) with PriorDistribution {
+        _l1RegWeight = regularizationContext.getL1RegularizationWeight(regularizationWeight)
+        _l2RegWeight = regularizationContext.getL2RegularizationWeight(regularizationWeight)
+        _previousCoefficients = priorGeneralizedLinearModel.coefficients
+      }
+    } else {
+      regularizationContext.regularizationType match {
+        case RegularizationType.L2 | RegularizationType.ELASTIC_NET =>
+          new DistributedGLMLossFunction(singleLossFunction, treeAggregateDepth)
+            with L2RegularizationTwiceDiff {
 
-          l2RegWeight = regularizationContext.getL2RegularizationWeight(regularizationWeight)
-        }
+            l2RegWeight = regularizationContext.getL2RegularizationWeight(regularizationWeight)
+          }
 
-      case _ => new DistributedGLMLossFunction(singleLossFunction, treeAggregateDepth)
+        case _ => new DistributedGLMLossFunction(singleLossFunction, treeAggregateDepth)
+      }
     }
+
   }
 }

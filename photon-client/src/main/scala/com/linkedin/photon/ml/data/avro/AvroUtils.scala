@@ -359,6 +359,9 @@ object AvroUtils {
    * @param featureMap The map from feature name of type [[NameAndTerm]] to feature index of type [[Int]]
    * @return The generalized linear model converted from the Avro record
    */
+
+  // TODO: Load coefficient variances
+
   protected[avro] def convertBayesianLinearModelAvroToGLM(
       bayesianLinearModelAvro: BayesianLinearModelAvro,
       featureMap: IndexMap): GeneralizedLinearModel = {

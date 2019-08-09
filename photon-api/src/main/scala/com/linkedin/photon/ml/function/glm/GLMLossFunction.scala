@@ -17,6 +17,7 @@ package com.linkedin.photon.ml.function.glm
 import com.linkedin.photon.ml.algorithm.Coordinate
 import com.linkedin.photon.ml.function.ObjectiveFunction
 import com.linkedin.photon.ml.optimization.game.{CoordinateOptimizationConfiguration, FixedEffectOptimizationConfiguration, RandomEffectOptimizationConfiguration}
+import com.linkedin.photon.ml.supervised.model.GeneralizedLinearModel
 
 /**
  * Helper for generalized linear model loss function related tasks.
@@ -32,15 +33,14 @@ object GLMLossFunction {
    * @return A function which builds the appropriate type of [[ObjectiveFunction]] for a given [[Coordinate]] type and
    *         optimization settings.
    */
-  def buildFactory
-      (lossFunction: PointwiseLossFunction, treeAggregateDepth: Int)
-      (config: CoordinateOptimizationConfiguration): () => ObjectiveFunction =
+  def buildFactory(lossFunction: PointwiseLossFunction, treeAggregateDepth: Int)
+      (config: CoordinateOptimizationConfiguration, isIncrementalTrainingEnabled: Boolean = false): GeneralizedLinearModel => ObjectiveFunction =
     config match {
       case fEOptConfig: FixedEffectOptimizationConfiguration =>
-        () => DistributedGLMLossFunction(fEOptConfig, lossFunction, treeAggregateDepth)
+        (generalizedLinearModel: GeneralizedLinearModel) => DistributedGLMLossFunction(fEOptConfig, lossFunction, treeAggregateDepth, generalizedLinearModel, isIncrementalTrainingEnabled)
 
       case rEOptConfig: RandomEffectOptimizationConfiguration =>
-        () => SingleNodeGLMLossFunction(rEOptConfig, lossFunction)
+        (generalizedLinearModel: GeneralizedLinearModel) => SingleNodeGLMLossFunction(rEOptConfig, lossFunction, generalizedLinearModel, isIncrementalTrainingEnabled)
 
       case _ =>
         throw new UnsupportedOperationException(

@@ -17,10 +17,9 @@ package com.linkedin.photon.ml.optimization.game
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-
 import com.linkedin.photon.ml.Types.REId
 import com.linkedin.photon.ml.function.SingleNodeObjectiveFunction
-import com.linkedin.photon.ml.model.Coefficients
+import com.linkedin.photon.ml.model.{Coefficients, RandomEffectModel}
 import com.linkedin.photon.ml.normalization.NormalizationContext
 import com.linkedin.photon.ml.optimization.VarianceComputationType.VarianceComputationType
 import com.linkedin.photon.ml.optimization.{SingleNodeOptimizationProblem, VarianceComputationType}
@@ -151,7 +150,8 @@ object RandomEffectOptimizationProblem {
   protected[ml] def apply[RandomEffectObjective <: SingleNodeObjectiveFunction](
       linearSubspaceProjectorsRDD: RDD[(REId, LinearSubspaceProjector)],
       configuration: RandomEffectOptimizationConfiguration,
-      objectiveFunctionConstructor: () => RandomEffectObjective,
+      objectiveFunctionConstructor: GeneralizedLinearModel => RandomEffectObjective,
+      priorModel: RandomEffectModel,
       glmConstructor: Coefficients => GeneralizedLinearModel,
       normalizationContext: NormalizationContext,
       varianceComputationType: VarianceComputationType = VarianceComputationType.NONE,
@@ -165,7 +165,8 @@ object RandomEffectOptimizationProblem {
 
     // Generate new NormalizationContext and SingleNodeOptimizationProblem objects
     val optimizationProblems = linearSubspaceProjectorsRDD
-      .mapValues { projector =>
+      .join(priorModel.modelsRDD)
+      .mapValues { case (projector, model) =>
         val normContext = normalizationContextBroadcast.value
         val factors = normContext.factorsOpt.map(factors => projector.projectForward(factors))
         val shiftsAndIntercept = normContext
@@ -180,13 +181,13 @@ object RandomEffectOptimizationProblem {
 
         SingleNodeOptimizationProblem(
           configurationBroadcast.value,
-          objectiveFunctionBuilderBroadcast.value(),
+          objectiveFunctionBuilderBroadcast.value,
+          model,
           glmConstructorBroadcast.value,
           PhotonNonBroadcast(projectedNormalizationContext),
-          varianceComputationType,
-          isTrackingState)
+          varianceComputationType)
       }
 
-    new RandomEffectOptimizationProblem(optimizationProblems, glmConstructor, isTrackingState)
+    new RandomEffectOptimizationProblem(optimizationProblems, glmConstructor)
   }
 }

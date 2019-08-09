@@ -15,12 +15,12 @@
 package com.linkedin.photon.ml.function.svm
 
 import breeze.linalg.Vector
-
 import com.linkedin.photon.ml.algorithm.Coordinate
 import com.linkedin.photon.ml.constants.MathConst
 import com.linkedin.photon.ml.data.LabeledPoint
 import com.linkedin.photon.ml.function.ObjectiveFunction
 import com.linkedin.photon.ml.optimization.game.{CoordinateOptimizationConfiguration, FixedEffectOptimizationConfiguration, RandomEffectOptimizationConfiguration}
+import com.linkedin.photon.ml.supervised.model.GeneralizedLinearModel
 
 /**
  * Implement Rennie's smoothed hinge loss function (http://qwone.com/~jason/writing/smoothHinge.pdf) as an
@@ -95,13 +95,14 @@ object SmoothedHingeLossFunction {
    * @return A function which builds the appropriate type of [[ObjectiveFunction]] for a given [[Coordinate]] type and
    *         optimization settings.
    */
-  def buildFactory(treeAggregateDepth: Int)(config: CoordinateOptimizationConfiguration): () => ObjectiveFunction =
+  def buildFactory(treeAggregateDepth: Int)
+    (config: CoordinateOptimizationConfiguration, isIncrementalTrainingEnabled: Boolean): GeneralizedLinearModel => ObjectiveFunction =
     config match {
       case fEOptConfig: FixedEffectOptimizationConfiguration =>
-        () => DistributedSmoothedHingeLossFunction(fEOptConfig, treeAggregateDepth)
+        GeneralizedLinearModel => DistributedSmoothedHingeLossFunction(fEOptConfig, treeAggregateDepth)
 
       case rEOptConfig: RandomEffectOptimizationConfiguration =>
-        () => SingleNodeSmoothedHingeLossFunction(rEOptConfig)
+        GeneralizedLinearModel => SingleNodeSmoothedHingeLossFunction(rEOptConfig)
 
       case _ =>
         throw new UnsupportedOperationException(
