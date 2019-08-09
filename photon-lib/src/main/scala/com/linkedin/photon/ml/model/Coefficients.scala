@@ -14,9 +14,8 @@
  */
 package com.linkedin.photon.ml.model
 
-import breeze.linalg.{DenseVector, SparseVector, Vector, norm}
+import breeze.linalg.{DenseVector, Matrix, SparseVector, Vector, norm}
 import breeze.stats.meanAndVariance
-
 import com.linkedin.photon.ml.constants.MathConst
 import com.linkedin.photon.ml.util.{MathUtils, Summarizable, VectorUtils}
 
@@ -28,7 +27,10 @@ import com.linkedin.photon.ml.util.{MathUtils, Summarizable, VectorUtils}
  * @param means The mean of the model coefficients
  * @param variancesOption Optional variance of the model coefficients
  */
-case class Coefficients(means: Vector[Double], variancesOption: Option[Vector[Double]] = None)
+case class Coefficients(
+  means: Vector[Double],
+  variancesOption: Option[Vector[Double]] = None,
+  hessianMatrixOption: Option[Matrix[Double]] = None)
   extends Summarizable {
 
   // Force means and variances to be of the same type (dense or sparse). This seems reasonable
@@ -103,16 +105,25 @@ case class Coefficients(means: Vector[Double], variancesOption: Option[Vector[Do
   override def equals(that: Any): Boolean =
     that match {
       case other: Coefficients =>
-        val (m1, v1, m2, v2) = (this.means, this.variancesOption, other.means, other.variancesOption)
-        val sameType = m1.getClass == m2.getClass && v1.map(_.getClass) == v2.map(_.getClass)
+        val (m1, v1, h1, m2, v2, h2) = (this.means, this.variancesOption, this.hessianMatrixOption,
+          other.means, other.variancesOption, other.hessianMatrixOption)
+        val sameType = m1.getClass == m2.getClass &&
+          v1.map(_.getClass) == v2.map(_.getClass) &&
+          h1.map(_.getClass) == h2.map(_.getClass)
         lazy val sameMeans = VectorUtils.areAlmostEqual(m1, m2)
         lazy val sameVariance = (v1, v2) match {
           case (None, None) => true
+
           case (Some(val1), Some(val2)) => VectorUtils.areAlmostEqual(val1, val2)
           case (_, _) => false
         }
+        lazy val sameHessian = (h1, h2) match {
+          case (None, None) => true
+          case (Some(val1), Some(val2)) => VectorUtils.areAlmostEqual(val1.flatten(), val2.flatten())
+          case (_, _) => false
+        }
 
-        sameType && sameMeans && sameVariance
+        sameType && sameMeans && sameVariance && sameHessian
 
       case _ => false
     }
@@ -136,6 +147,6 @@ protected[ml] object Coefficients {
    * @return Zero coefficient vector
    */
   def initializeZeroCoefficients(dimension: Int): Coefficients = {
-    Coefficients(Vector.zeros[Double](dimension), variancesOption = None)
+    Coefficients(Vector.zeros[Double](dimension), variancesOption = None, hessianMatrixOption = None)
   }
 }

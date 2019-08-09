@@ -131,6 +131,11 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
     "use warm start",
     "Whether to train the current model with coefficients initialized by the previous model.")
 
+  val enableIncrementalTraining: Param[Boolean] = ParamUtils.createParam[Boolean](
+    "enable incremental traning",
+    "A boolean flag that indicates whether incremental training should be preformed"
+  )
+
   //
   // Initialize object
   //
@@ -170,6 +175,8 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
 
   def setUseWarmStart(value: Boolean): this.type = set(useWarmStart, value)
 
+  def setEnableIncrementalTraining(value: Boolean): this.type = set(enableIncrementalTraining, value)
+
   //
   // Params trait extensions
   //
@@ -201,6 +208,7 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
     setDefault(treeAggregateDepth, DEFAULT_TREE_AGGREGATE_DEPTH)
     setDefault(ignoreThresholdForNewModels, false)
     setDefault(useWarmStart, true)
+    setDefault(enableIncrementalTraining, false)
   }
 
   /**
@@ -225,6 +233,7 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
     val normalizationContextsOpt = get(coordinateNormalizationContexts)
     val ignoreThreshold = getOrDefault(ignoreThresholdForNewModels)
     val numUniqueCoordinates = updateSequence.toSet.size
+    val isIncrementalTrainingEnabled = getOrDefault(enableIncrementalTraining)
 
     // Cannot have coordinates repeat in the update sequence
     require(
@@ -283,6 +292,14 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
       require(
         normalizationContextsOpt.forall(normalizationContexts => normalizationContexts.contains(coordinate)),
         s"Coordinate $coordinate in the update sequence is missing normalization context")
+    }
+
+//    todo: how to verify that existing models contain variance information and match the input variance type
+    if (isIncrementalTrainingEnabled) {
+      require(
+        initialModelOpt.isDefined,
+        "Incremental training is enabled, but the model is missing")
+
     }
   }
 
@@ -642,6 +659,7 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
     }
     val downSamplerFactory = DownSamplerHelper.buildFactory(task)
     val lockedCoordinates = get(partialRetrainLockedCoordinates).getOrElse(Set())
+    val isIncrementalTrainingEnabled = getOrDefault(enableIncrementalTraining)
 
     // Create the optimization coordinates for each component model
     val coordinates: Map[CoordinateId, C forSome { type C <: Coordinate[_] }] =
@@ -654,6 +672,10 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
               case dataset => throw new UnsupportedOperationException(s"Unsupported dataset type: ${dataset.getClass}")
             }
           } else {
+            val priorModelOpt = initialModelOpt match {
+              case Some(gameModel) => gameModel.getModel(coordinateId)
+              case None => None
+            }
             CoordinateFactory.build(
               trainingDatasets(coordinateId),
               configuration(coordinateId),
@@ -661,7 +683,9 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
               glmConstructor,
               downSamplerFactory,
               normalizationContexts.getOrElse(coordinateId, NoNormalization()),
-              variance)
+              variance,
+              priorModelOpt,
+              isIncrementalTrainingEnabled)
           }
 
           (coordinateId, coordinate)

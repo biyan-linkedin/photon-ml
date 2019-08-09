@@ -171,6 +171,11 @@ object GameTrainingDriver extends GameDriver {
     "Flag to ignore the random effect samples lower bound when encountering a random effect ID without an existing " +
       "model during warm-start training.")
 
+  val enableIncrementalTraining: Param[Boolean] = ParamUtils.createParam[Boolean](
+    "enable incremental traning",
+    "A boolean flag that indicates whether incremental training should be preformed"
+  )
+
   //
   // Initialize object
   //
@@ -216,6 +221,7 @@ object GameTrainingDriver extends GameDriver {
     setDefault(modelSparsityThreshold, VectorUtils.DEFAULT_SPARSITY_THRESHOLD)
     setDefault(timeZone, Constants.DEFAULT_TIME_ZONE)
     setDefault(ignoreThresholdForNewModels, false)
+    setDefault(enableIncrementalTraining, false)
   }
 
   /**
@@ -245,6 +251,8 @@ object GameTrainingDriver extends GameDriver {
     val normalizationType = paramMap.getOrElse(normalization, getDefault(normalization).get)
     val hyperParameterTuningMode = paramMap.getOrElse(hyperParameterTuning, getDefault(hyperParameterTuning).get)
     val ignoreThreshold = paramMap.getOrElse(ignoreThresholdForNewModels, getDefault(ignoreThresholdForNewModels).get)
+    val isIncrementalTrainingEnabled =
+      paramMap.getOrElse(enableIncrementalTraining, getDefault(enableIncrementalTraining).get)
 
     // Warm-start must be enabled to ignore threshold
     require(
@@ -329,6 +337,12 @@ object GameTrainingDriver extends GameDriver {
           "Hyperparameter tuning enabled, but number of iterations unspecified.")
 
       case _ =>
+    }
+
+    if (isIncrementalTrainingEnabled) {
+      require(
+        baseModelDirOpt.isDefined,
+        "Incremental Training is enabled, but the base model dir is missing.")
     }
   }
 
@@ -449,6 +463,7 @@ object GameTrainingDriver extends GameDriver {
         .setVarianceComputation(getOrDefault(varianceComputationType))
         .setIgnoreThresholdForNewModels(getOrDefault(ignoreThresholdForNewModels))
         .setUseWarmStart(true)
+        .setEnableIncrementalTraining(getOrDefault(enableIncrementalTraining))
 
       get(inputColumnNames).foreach(estimator.setInputColumnNames)
       modelOpt.foreach(estimator.setInitialModel)

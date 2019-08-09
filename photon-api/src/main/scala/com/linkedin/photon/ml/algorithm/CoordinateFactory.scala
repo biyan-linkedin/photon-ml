@@ -17,7 +17,7 @@ package com.linkedin.photon.ml.algorithm
 import com.linkedin.photon.ml.data.{Dataset, FixedEffectDataset, RandomEffectDataset}
 import com.linkedin.photon.ml.function.ObjectiveFunctionHelper.{DistributedObjectiveFunctionFactory, ObjectiveFunctionFactoryFactory, SingleNodeObjectiveFunctionFactory}
 import com.linkedin.photon.ml.function.ObjectiveFunction
-import com.linkedin.photon.ml.model.Coefficients
+import com.linkedin.photon.ml.model.{Coefficients, DatumScoringModel, FixedEffectModel, RandomEffectModel}
 import com.linkedin.photon.ml.normalization.NormalizationContext
 import com.linkedin.photon.ml.optimization.DistributedOptimizationProblem
 import com.linkedin.photon.ml.optimization.VarianceComputationType.VarianceComputationType
@@ -45,6 +45,7 @@ object CoordinateFactory {
    * @param downSamplerFactory A factory function for the [[DownSampler]] (if down-sampling is enabled)
    * @param normalizationContext The [[NormalizationContext]]
    * @param varianceComputationType Should the trained coefficient variances be computed in addition to the means?
+   * @param priorModel The prior model for warm-start and incremental training
    * @return A [[Coordinate]] for the [[Dataset]] of type [[D]]
    */
   def build[D <: Dataset[D]](
@@ -54,15 +55,18 @@ object CoordinateFactory {
       glmConstructor: Coefficients => GeneralizedLinearModel,
       downSamplerFactory: DownSamplerFactory,
       normalizationContext: NormalizationContext,
-      varianceComputationType: VarianceComputationType): Coordinate[D] = {
+      varianceComputationType: VarianceComputationType,
+      priorModel: Option[DatumScoringModel],
+      isIncrementalTrainingEnabled: Boolean = false): Coordinate[D] = {
 
-    val lossFunctionFactory = lossFunctionFactoryConstructor(coordinateOptConfig)
+    val lossFunctionFactory = lossFunctionFactoryConstructor(coordinateOptConfig, isIncrementalTrainingEnabled)
 
-    (dataset, coordinateOptConfig, lossFunctionFactory) match {
+    (dataset, coordinateOptConfig, lossFunctionFactory, priorModel) match {
       case (
           fEDataset: FixedEffectDataset,
           fEOptConfig: FixedEffectOptimizationConfiguration,
-          distributedLossFunctionFactory: DistributedObjectiveFunctionFactory) =>
+          distributedLossFunctionFactory: DistributedObjectiveFunctionFactory,
+          Some(fixedEffectModel: FixedEffectModel)) =>
 
         val downSamplerOpt = if (DownSampler.isValidDownSamplingRate(fEOptConfig.downSamplingRate)) {
           Some(downSamplerFactory(fEOptConfig.downSamplingRate))
@@ -75,7 +79,7 @@ object CoordinateFactory {
           fEDataset,
           DistributedOptimizationProblem(
             fEOptConfig,
-            distributedLossFunctionFactory(),
+            distributedLossFunctionFactory(fixedEffectModel),
             downSamplerOpt,
             glmConstructor,
             normalizationPhotonBroadcast,
@@ -84,12 +88,14 @@ object CoordinateFactory {
       case (
           rEDataset: RandomEffectDataset,
           rEOptConfig: RandomEffectOptimizationConfiguration,
-          singleLossFunctionFactory: SingleNodeObjectiveFunctionFactory) =>
+          singleLossFunctionFactory: SingleNodeObjectiveFunctionFactory,
+          Some(randomEffectModel: RandomEffectModel)) =>
 
         RandomEffectCoordinate(
           rEDataset,
           rEOptConfig,
           singleLossFunctionFactory,
+          randomEffectModel,
           glmConstructor,
           normalizationContext,
           varianceComputationType).asInstanceOf[Coordinate[D]]

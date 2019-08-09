@@ -186,7 +186,7 @@ object RandomEffectCoordinate {
    *                               problems
    * @param randomEffectDataset The data on which to run the optimization algorithm
    * @param configuration The optimization problem configuration
-   * @param objectiveFunction The objective function to optimize
+   * @param objectiveFunctionFactory The objective function to optimize
    * @param glmConstructor The function to use for producing GLMs from trained coefficients
    * @param normalizationContext The normalization context
    * @param varianceComputationType If and how coefficient variances should be computed
@@ -196,7 +196,8 @@ object RandomEffectCoordinate {
   protected[ml] def apply[RandomEffectObjective <: SingleNodeObjectiveFunction](
       randomEffectDataset: RandomEffectDataset,
       configuration: RandomEffectOptimizationConfiguration,
-      objectiveFunction: () => RandomEffectObjective,
+      objectiveFunctionFactory: GeneralizedLinearModel => RandomEffectObjective,
+      priorRandomEffectModel: RandomEffectModel,
       glmConstructor: Coefficients => GeneralizedLinearModel,
       normalizationContext: NormalizationContext,
       varianceComputationType: VarianceComputationType = VarianceComputationType.NONE,
@@ -206,7 +207,8 @@ object RandomEffectCoordinate {
     val randomEffectOptimizationProblem = RandomEffectOptimizationProblem(
       randomEffectDataset.projectors,
       configuration,
-      objectiveFunction,
+      objectiveFunctionFactory,
+      priorRandomEffectModel,
       glmConstructor,
       normalizationContext,
       varianceComputationType,

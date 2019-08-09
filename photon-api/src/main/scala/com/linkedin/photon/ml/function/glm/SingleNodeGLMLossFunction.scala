@@ -15,12 +15,12 @@
 package com.linkedin.photon.ml.function.glm
 
 import breeze.linalg._
-
 import com.linkedin.photon.ml.data.LabeledPoint
 import com.linkedin.photon.ml.function._
 import com.linkedin.photon.ml.normalization.NormalizationContext
 import com.linkedin.photon.ml.optimization.RegularizationType
 import com.linkedin.photon.ml.optimization.game.GLMOptimizationConfiguration
+import com.linkedin.photon.ml.supervised.model.GeneralizedLinearModel
 import com.linkedin.photon.ml.util.BroadcastWrapper
 
 /**
@@ -148,18 +148,28 @@ object SingleNodeGLMLossFunction {
    */
   def apply(
       configuration: GLMOptimizationConfiguration,
-      singleLossFunction: PointwiseLossFunction): SingleNodeGLMLossFunction = {
+      singleLossFunction: PointwiseLossFunction,
+      priorGeneralizedLinearModel: GeneralizedLinearModel,
+      isIncrementalLearningEnabled: Boolean = false): SingleNodeGLMLossFunction = {
 
     val regularizationContext = configuration.regularizationContext
     val regularizationWeight = configuration.regularizationWeight
 
-    regularizationContext.regularizationType match {
-      case RegularizationType.L2 | RegularizationType.ELASTIC_NET =>
-        new SingleNodeGLMLossFunction(singleLossFunction) with L2RegularizationTwiceDiff {
-          l2RegWeight = regularizationContext.getL2RegularizationWeight(regularizationWeight)
-        }
+    if (isIncrementalLearningEnabled) {
+      new SingleNodeGLMLossFunction(singleLossFunction) with PriorDistribution {
+        _l1RegWeight = regularizationContext.getL1RegularizationWeight(regularizationWeight)
+        _l2RegWeight = regularizationContext.getL2RegularizationWeight(regularizationWeight)
+        _previousCoefficients = priorGeneralizedLinearModel.coefficients
+      }
+    } else {
+      regularizationContext.regularizationType match {
+        case RegularizationType.L2 | RegularizationType.ELASTIC_NET =>
+          new SingleNodeGLMLossFunction(singleLossFunction) with L2RegularizationTwiceDiff {
+            l2RegWeight = regularizationContext.getL2RegularizationWeight(regularizationWeight)
+          }
 
-      case _ => new SingleNodeGLMLossFunction(singleLossFunction)
+        case _ => new SingleNodeGLMLossFunction(singleLossFunction)
+      }
     }
   }
 }

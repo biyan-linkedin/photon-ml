@@ -114,6 +114,7 @@ object SingleNodeOptimizationProblem {
   def apply[Function <: SingleNodeObjectiveFunction](
       configuration: GLMOptimizationConfiguration,
       objectiveFunction: Function,
+      glmModel: GeneralizedLinearModel,
       glmConstructor: Coefficients => GeneralizedLinearModel,
       normalizationContext: BroadcastWrapper[NormalizationContext],
       varianceComputationType: VarianceComputationType): SingleNodeOptimizationProblem[Function] = {
@@ -129,7 +130,7 @@ object SingleNodeOptimizationProblem {
 
     new SingleNodeOptimizationProblem(
       optimizer,
-      objectiveFunction,
+      objectiveFunction(glmModel),
       glmConstructor,
       varianceComputationType)
   }
