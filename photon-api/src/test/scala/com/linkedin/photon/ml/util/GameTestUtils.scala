@@ -19,12 +19,13 @@ import java.util.concurrent.atomic.AtomicLong
 import org.apache.spark.{HashPartitioner, SparkConf}
 import breeze.linalg.DenseVector
 import org.testng.annotations.DataProvider
-
 import com.linkedin.photon.ml.TaskType.TaskType
 import com.linkedin.photon.ml.{SparkSessionConfiguration, TaskType}
 import com.linkedin.photon.ml.Types.{FeatureShardId, REId, REType, UniqueSampleId}
 import com.linkedin.photon.ml.algorithm.{FixedEffectCoordinate, RandomEffectCoordinate}
 import com.linkedin.photon.ml.data._
+import com.linkedin.photon.ml.estimators.GameEstimator
+import com.linkedin.photon.ml.function.{ObjectiveFunctionHelper, SingleNodeObjectiveFunction}
 import com.linkedin.photon.ml.function.glm.{DistributedGLMLossFunction, LogisticLossFunction, SingleNodeGLMLossFunction}
 import com.linkedin.photon.ml.model.{Coefficients, FixedEffectModel, RandomEffectModel}
 import com.linkedin.photon.ml.normalization.NoNormalization
@@ -63,6 +64,8 @@ trait GameTestUtils extends SparkTestUtils {
    * @return A tuple with global id and the item
    */
   def addUniqueId[T](item: T): (Long, T) = (nextId.incrementAndGet, item)
+
+  val coefficientsDim = 1
 
   /**
    * A trivial set of fixed labeled points for simple tests to verify by hand.
@@ -150,7 +153,8 @@ trait GameTestUtils extends SparkTestUtils {
 
     DistributedOptimizationProblem(
       configuration,
-      DistributedGLMLossFunction(configuration, LogisticLossFunction, treeAggregateDepth = 1),
+      DistributedGLMLossFunction(configuration, LogisticLossFunction, treeAggregateDepth = 1,
+        priorGeneralizedLinearModel = None, isIncrementalTrainingEnabled = false),
       None,
       LogisticRegressionModel.apply,
       PhotonBroadcast(sc.broadcast(NoNormalization())),
@@ -266,17 +270,21 @@ trait GameTestUtils extends SparkTestUtils {
    * @return A newly generated random effect optimization problem
    */
   def generateRandomEffectOptimizationProblem(
-      dataset: RandomEffectDataset): RandomEffectOptimizationProblem[SingleNodeGLMLossFunction] = {
+      dataset: RandomEffectDataset): RandomEffectOptimizationProblem[SingleNodeObjectiveFunction] = {
 
     val configuration = RandomEffectOptimizationConfiguration(generateOptimizerConfig())
     val normalizationBroadcast = sc.broadcast(NoNormalization())
+    val objectiveFunctionConstructor = ObjectiveFunctionHelper
+      .buildFactory(TaskType.LOGISTIC_REGRESSION, GameEstimator.DEFAULT_TREE_AGGREGATE_DEPTH)(configuration, false)
+      .asInstanceOf[ObjectiveFunctionHelper.SingleNodeObjectiveFunctionFactory]
     val randomEffectOptimizationProblems = dataset
       .activeData
       .mapValues { _ =>
         SingleNodeOptimizationProblem(
           configuration,
-          SingleNodeGLMLossFunction(configuration, LogisticLossFunction),
-          LogisticRegressionModel.apply,
+          objectiveFunctionConstructor,
+          LogisticRegressionModel.apply(Coefficients.initializeZeroCoefficients(coefficientsDim)),
+          LogisticRegressionModel.apply _,
           PhotonBroadcast(normalizationBroadcast),
           VarianceComputationType.NONE)
       }
@@ -301,7 +309,7 @@ trait GameTestUtils extends SparkTestUtils {
       numEntities: Int,
       size: Int,
       dimensions: Int,
-      seed: Int = DefaultSeed): (RandomEffectCoordinate[SingleNodeGLMLossFunction], RandomEffectModel) = {
+      seed: Int = DefaultSeed): (RandomEffectCoordinate[SingleNodeObjectiveFunction], RandomEffectModel) = {
 
     val randomEffectIds = (1 to numEntities).map("re" + _)
 
@@ -314,7 +322,7 @@ trait GameTestUtils extends SparkTestUtils {
       seed)
 
     val optimizationProblem = generateRandomEffectOptimizationProblem(randomEffectDataset)
-    val coordinate = new RandomEffectCoordinate[SingleNodeGLMLossFunction](randomEffectDataset, optimizationProblem)
+    val coordinate = new RandomEffectCoordinate(randomEffectDataset, optimizationProblem)
     val models = sc.parallelize(generateLinearModelsForRandomEffects(randomEffectIds, dimensions))
     val model = new RandomEffectModel(
       models,

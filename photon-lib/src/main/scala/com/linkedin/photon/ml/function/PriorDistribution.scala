@@ -14,7 +14,7 @@
  */
 package com.linkedin.photon.ml.function
 
-import breeze.linalg.{Vector, diag}
+import breeze.linalg.{*, DenseMatrix, DenseVector, Vector, diag, sum}
 import breeze.numerics.abs
 import com.linkedin.photon.ml.normalization.NormalizationContext
 import com.linkedin.photon.ml.util.BroadcastWrapper
@@ -100,18 +100,19 @@ trait PriorDistribution extends ObjectiveFunction {
     input: Data,
     coefficients: Coefficients,
     normalizationContext: BroadcastWrapper[NormalizationContext]): Double =
-    super.value(input, coefficients, normalizationContext) + l2RegValue(convertToVector(coefficients))
+    super.value(input, coefficients, normalizationContext) + l1RegValue(convertToVector(coefficients)) +
+      l2RegValue(convertToVector(coefficients))
 
   /**
-    * Compute the L2 regularization value for the given model coefficients.
+    * Compute the L1 regularization value for the given model coefficients.
     *
     * @param coefficients The model coefficients
-    * @return The L2 regularization value
+    * @return The L1 regularization value
     */
   protected def l1RegValue(coefficients: Vector[Double]): Double = {
-    require(_previousCoefficients.hessianMatrixOption.isDefined, "Variance of previous batch should not be empty.")
-    val normalizedCoefficients = (coefficients - _previousCoefficients.means) / diag(_previousCoefficients.hessianMatrixOption.get)
-    _l2RegWeight * abs(normalizedCoefficients)
+    require(_previousCoefficients.variancesOption.isDefined, "Variance of previous batch should not be empty.")
+    val normalizedCoefficients = (coefficients - _previousCoefficients.means) :/ _previousCoefficients.variancesOption.get
+    _l1RegWeight * sum(abs(normalizedCoefficients))
   }
 
   /**
@@ -121,16 +122,159 @@ trait PriorDistribution extends ObjectiveFunction {
     * @return The L2 regularization value
     */
   protected def l2RegValue(coefficients: Vector[Double]): Double = {
-    require(_previousCoefficients.hessianMatrixOption.isDefined, "Variance of previous batch should not be empty.")
-    val normalizedCoefficients = (coefficients - _previousCoefficients.means) / diag(_previousCoefficients.hessianMatrixOption.get)
+    require(_previousCoefficients.variancesOption.isDefined, "Variance of previous batch should not be empty.")
+    val normalizedCoefficients = (coefficients - _previousCoefficients.means) :/ _previousCoefficients.variancesOption.get
     _l2RegWeight * normalizedCoefficients.dot(normalizedCoefficients) / 2
   }
 }
 
-trait PriorDistributionDiff extends L2RegularizationDiff with PriorDistribution {
+trait PriorDistributionDiff extends DiffFunction with PriorDistribution {
 
+
+  /**
+    * Compute the value of the function with L2 regularization over the given data for the given model coefficients.
+    *
+    * @param input The given data over which to compute the objective value
+    * @param coefficients The model coefficients used to compute the function's value
+    * @param normalizationContext The normalization context
+    * @return The computed value of the function
+    */
+  abstract override protected[ml] def value(
+    input: Data,
+    coefficients: Coefficients,
+    normalizationContext: BroadcastWrapper[NormalizationContext]): Double =
+    calculate(input, coefficients, normalizationContext)._1
+
+  /**
+    * Compute the gradient of the function with L2 regularization over the given data for the given model coefficients.
+    *
+    * @param input The given data over which to compute the gradient
+    * @param coefficients The model coefficients used to compute the function's gradient
+    * @param normalizationContext The normalization context
+    * @return The computed gradient of the function
+    */
+  abstract override protected[ml] def gradient(
+    input: Data,
+    coefficients: Coefficients,
+    normalizationContext: BroadcastWrapper[NormalizationContext]): Vector[Double] =
+    calculate(input, coefficients, normalizationContext)._2
+
+  /**
+    * Compute both the value and the gradient of the function with L2 regularization for the given model coefficients
+    * (computing value and gradient at once is sometimes more efficient than computing them sequentially).
+    *
+    * @param input The given data over which to compute the value and gradient
+    * @param coefficients The model coefficients used to compute the function's value and gradient
+    * @param normalizationContext The normalization context
+    * @return The computed value and gradient of the function
+    */
+  abstract override protected[ml] def calculate(
+    input: Data,
+    coefficients: Coefficients,
+    normalizationContext: BroadcastWrapper[NormalizationContext]): (Double, Vector[Double]) = {
+
+    val (baseValue, baseGradient) = super.calculate(input, coefficients, normalizationContext)
+    val valueWithRegularization = baseValue + l1RegValue(convertToVector(coefficients)) +
+      l2RegValue(convertToVector(coefficients))
+    val gradientWithRegularization = baseGradient + l1RegGradient(convertToVector(coefficients)) +
+      l2RegGradient(convertToVector(coefficients))
+
+    (valueWithRegularization, gradientWithRegularization)
+  }
+
+  /**
+    * Compute the gradient of the L1 regularization term for the given model coefficients.
+    *
+    * @param coefficients The model coefficients
+    * @return The gradient of the L1 regularization term
+    */
+  protected def l1RegGradient(coefficients: Vector[Double]): Vector[Double] = {
+    require(_previousCoefficients.variancesOption.isDefined, "Variance of previous batch should not be empty.")
+    val normalizedCoefficients = (coefficients - _previousCoefficients.means) :/ _previousCoefficients.variancesOption.get
+    // Todo: what if normalizedCoefficient[i] == 0?
+    val coefficientsMask = normalizedCoefficients.map(coefficient => if (coefficient > 0) 1.0 else -1.0)
+    _l1RegWeight * (coefficientsMask :* _previousCoefficients.variancesOption.get)
+  }
+
+  /**
+    * Compute the gradient of the L2 regularization term for the given model coefficients.
+    *
+    * @param coefficients The model coefficients
+    * @return The gradient of the L2 regularization term
+    */
+  protected def l2RegGradient(coefficients: Vector[Double]): Vector[Double] = {
+    require(_previousCoefficients.variancesOption.isDefined, "Variance of previous batch should not be empty.")
+    val normalizedCoefficients = (coefficients - _previousCoefficients.means) :/ _previousCoefficients.variancesOption.get
+    _l2RegWeight * normalizedCoefficients
+  }
 }
 
-trait PriorDistributionTwiceDiff extends L2RegularizationTwiceDiff with PriorDistributionDiff {
+trait PriorDistributionTwiceDiff extends TwiceDiffFunction with PriorDistributionDiff {
+  /**
+    * Compute the Hessian of the function with L2 regularization over the given data for the given model coefficients.
+    *
+    * @param input The given data over which to compute the Hessian
+    * @param coefficients The model coefficients used to compute the function's hessian, multiplied by a given vector
+    * @param multiplyVector The given vector to be dot-multiplied with the Hessian. For example, in conjugate
+    *                       gradient method this would correspond to the gradient multiplyVector.
+    * @param normalizationContext The normalization context
+    * @return The computed Hessian multiplied by the given multiplyVector
+    */
+  abstract override protected[ml] def hessianVector(
+    input: Data,
+    coefficients: Coefficients,
+    multiplyVector: Coefficients,
+    normalizationContext: BroadcastWrapper[NormalizationContext]): Vector[Double] =
+    super.hessianVector(input, coefficients, multiplyVector, normalizationContext) +
+      l2RegHessianVector(convertToVector(multiplyVector))
 
+  /**
+    * Compute the diagonal of the Hessian matrix for the function with L2 regularization over the given data for the
+    * given model coefficients.
+    *
+    * @param input The given data over which to compute the diagonal of the Hessian matrix
+    * @param coefficients The model coefficients used to compute the diagonal of the Hessian matrix
+    * @return The computed diagonal of the Hessian matrix
+    */
+  abstract override protected[ml] def hessianDiagonal(input: Data, coefficients: Coefficients): Vector[Double] = {
+    val hessianDiagonal = super.hessianDiagonal(input, coefficients)
+    _previousCoefficients.variancesOption match {
+      case Some(variances: Vector[Double]) => hessianDiagonal :+ (l2RegHessianDiagonal * variances)
+      case None => hessianDiagonal :+ l2RegHessianDiagonal
+    }
+  }
+
+
+  /**
+    * Compute the Hessian matrix for the function with L2 regularization over the given data for the given model
+    * coefficients.
+    *
+    * @param input The given data over which to compute the diagonal of the Hessian matrix
+    * @param coefficients The model coefficients used to compute the diagonal of the Hessian matrix
+    * @return The computed Hessian matrix
+    */
+  abstract override protected[ml] def hessianMatrix(input: Data, coefficients: Coefficients): DenseMatrix[Double] = {
+
+    val hessianMatrix = super.hessianMatrix(input, coefficients)
+    _previousCoefficients.variancesOption match {
+      case Some(variances: DenseVector[Double]) => hessianMatrix +
+        l2RegHessianDiagonal * diag(variances)
+      case None => hessianMatrix + l2RegHessianDiagonal * DenseMatrix.eye[Double](hessianMatrix.rows)
+    }
+  }
+
+  /**
+    * Compute the Hessian vector of the L2 regularization term for the given Hessian multiplication vector.
+    *
+    * @param multiplyVector The Hessian multiplication vector
+    * @return The Heassian vector of the L2 regularization term
+    */
+  protected def l2RegHessianVector(multiplyVector: Vector[Double]): Vector[Double] = multiplyVector * _l2RegWeight
+
+  /**
+    * Compute the Hessian diagonal of the L2 regularization term.
+    *
+    * @return The Hessian diagonal of the L2 regularization term
+    */
+  protected def l2RegHessianDiagonal: Double = _l2RegWeight
 }

@@ -123,7 +123,9 @@ object ModelTraining extends Logging {
         val objective = DistributedGLMLossFunction(
           optimizationConfig,
           LogisticLossFunction,
-          treeAggregateDepth)
+          treeAggregateDepth,
+          priorGeneralizedLinearModel = None,
+          isIncrementalTrainingEnabled = false)
 
         (constructor, objective)
 
@@ -132,7 +134,9 @@ object ModelTraining extends Logging {
         val objective = DistributedGLMLossFunction(
           optimizationConfig,
           SquaredLossFunction,
-          treeAggregateDepth)
+          treeAggregateDepth,
+          priorGeneralizedLinearModel = None,
+          isIncrementalTrainingEnabled = false)
 
         (constructor, objective)
 
@@ -141,7 +145,9 @@ object ModelTraining extends Logging {
         val objective = DistributedGLMLossFunction(
           optimizationConfig,
           PoissonLossFunction,
-          treeAggregateDepth)
+          treeAggregateDepth,
+          priorGeneralizedLinearModel = None,
+          isIncrementalTrainingEnabled = false)
 
         (constructor, objective)
 

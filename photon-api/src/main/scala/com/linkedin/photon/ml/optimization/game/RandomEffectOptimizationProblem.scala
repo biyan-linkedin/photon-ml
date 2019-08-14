@@ -144,7 +144,6 @@ object RandomEffectOptimizationProblem {
    * @param glmConstructor The function to use for producing GLMs from trained coefficients
    * @param normalizationContext The normalization context
    * @param varianceComputationType If and how coefficient variances should be computed
-   * @param isTrackingState Should the optimization problem record the internal optimizer states?
    * @return
    */
   protected[ml] def apply[RandomEffectObjective <: SingleNodeObjectiveFunction](
@@ -154,8 +153,8 @@ object RandomEffectOptimizationProblem {
       priorRandomEffectMode: RandomEffectModel,
       glmConstructor: Coefficients => GeneralizedLinearModel,
       normalizationContext: NormalizationContext,
-      varianceComputationType: VarianceComputationType = VarianceComputationType.NONE,
-      isTrackingState: Boolean = false): RandomEffectOptimizationProblem[RandomEffectObjective] = {
+      varianceComputationType: VarianceComputationType = VarianceComputationType.NONE)
+    : RandomEffectOptimizationProblem[RandomEffectObjective] = {
 
     val sc = linearSubspaceProjectorsRDD.sparkContext
     val configurationBroadcast = sc.broadcast(configuration)

@@ -161,17 +161,17 @@ object DistributedGLMLossFunction {
       configuration: GLMOptimizationConfiguration,
       singleLossFunction: PointwiseLossFunction,
       treeAggregateDepth: Int,
-      priorGeneralizedLinearModel: GeneralizedLinearModel,
+      priorGeneralizedLinearModel: Option[GeneralizedLinearModel],
       isIncrementalTrainingEnabled: Boolean): DistributedGLMLossFunction = {
 
     val regularizationContext = configuration.regularizationContext
     val regularizationWeight = configuration.regularizationWeight
 
     if (isIncrementalTrainingEnabled) {
-      new DistributedGLMLossFunction(singleLossFunction, treeAggregateDepth) with PriorDistribution {
+      new DistributedGLMLossFunction(singleLossFunction, treeAggregateDepth) with PriorDistributionTwiceDiff{
         _l1RegWeight = regularizationContext.getL1RegularizationWeight(regularizationWeight)
         _l2RegWeight = regularizationContext.getL2RegularizationWeight(regularizationWeight)
-        _previousCoefficients = priorGeneralizedLinearModel.coefficients
+        _previousCoefficients = priorGeneralizedLinearModel.get.coefficients
       }
     } else {
       regularizationContext.regularizationType match {

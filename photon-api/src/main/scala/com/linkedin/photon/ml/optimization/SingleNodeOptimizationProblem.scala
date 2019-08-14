@@ -105,7 +105,7 @@ object SingleNodeOptimizationProblem {
    * Factory method to create new SingleNodeOptimizationProblems.
    *
    * @param configuration The optimization problem configuration
-   * @param objectiveFunction The objective function to optimize
+   * @param objectiveFunctionConstructor The objective function to optimize
    * @param glmConstructor The function to use for producing GLMs from trained coefficients
    * @param normalizationContext The normalization context
    * @param varianceComputationType Whether to compute coefficient variances, and if so how
@@ -113,7 +113,7 @@ object SingleNodeOptimizationProblem {
    */
   def apply[Function <: SingleNodeObjectiveFunction](
       configuration: GLMOptimizationConfiguration,
-      objectiveFunction: Function,
+      objectiveFunctionConstructor: GeneralizedLinearModel => Function,
       glmModel: GeneralizedLinearModel,
       glmConstructor: Coefficients => GeneralizedLinearModel,
       normalizationContext: BroadcastWrapper[NormalizationContext],
@@ -130,7 +130,7 @@ object SingleNodeOptimizationProblem {
 
     new SingleNodeOptimizationProblem(
       optimizer,
-      objectiveFunction(glmModel),
+      objectiveFunctionConstructor(glmModel),
       glmConstructor,
       varianceComputationType)
   }

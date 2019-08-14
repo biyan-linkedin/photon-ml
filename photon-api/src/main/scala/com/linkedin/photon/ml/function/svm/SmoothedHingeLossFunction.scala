@@ -96,7 +96,8 @@ object SmoothedHingeLossFunction {
    *         optimization settings.
    */
   def buildFactory(treeAggregateDepth: Int)
-    (config: CoordinateOptimizationConfiguration, isIncrementalTrainingEnabled: Boolean): GeneralizedLinearModel => ObjectiveFunction =
+    (config: CoordinateOptimizationConfiguration,
+      isIncrementalTrainingEnabled: Boolean = false): GeneralizedLinearModel => ObjectiveFunction =
     config match {
       case fEOptConfig: FixedEffectOptimizationConfiguration =>
         GeneralizedLinearModel => DistributedSmoothedHingeLossFunction(fEOptConfig, treeAggregateDepth)

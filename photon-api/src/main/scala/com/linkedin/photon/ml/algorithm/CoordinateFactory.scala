@@ -15,13 +15,15 @@
 package com.linkedin.photon.ml.algorithm
 
 import com.linkedin.photon.ml.data.{Dataset, FixedEffectDataset, RandomEffectDataset}
-import com.linkedin.photon.ml.function.ObjectiveFunctionHelper.{DistributedObjectiveFunctionFactory, ObjectiveFunctionFactoryFactory, SingleNodeObjectiveFunctionFactory}
+import com.linkedin.photon.ml.function.ObjectiveFunctionHelper.{DistributedObjectiveFunctionFactory,
+  ObjectiveFunctionFactoryFactory, SingleNodeObjectiveFunctionFactory}
 import com.linkedin.photon.ml.function.ObjectiveFunction
 import com.linkedin.photon.ml.model.{Coefficients, DatumScoringModel, FixedEffectModel, RandomEffectModel}
 import com.linkedin.photon.ml.normalization.NormalizationContext
 import com.linkedin.photon.ml.optimization.DistributedOptimizationProblem
 import com.linkedin.photon.ml.optimization.VarianceComputationType.VarianceComputationType
-import com.linkedin.photon.ml.optimization.game.{CoordinateOptimizationConfiguration, FixedEffectOptimizationConfiguration, RandomEffectOptimizationConfiguration}
+import com.linkedin.photon.ml.optimization.game.{CoordinateOptimizationConfiguration,
+  FixedEffectOptimizationConfiguration, RandomEffectOptimizationConfiguration}
 import com.linkedin.photon.ml.sampling.DownSampler
 import com.linkedin.photon.ml.sampling.DownSamplerHelper.DownSamplerFactory
 import com.linkedin.photon.ml.supervised.model.GeneralizedLinearModel
@@ -79,7 +81,7 @@ object CoordinateFactory {
           fEDataset,
           DistributedOptimizationProblem(
             fEOptConfig,
-            distributedLossFunctionFactory(fixedEffectModel),
+            distributedLossFunctionFactory(fixedEffectModel.model),
             downSamplerOpt,
             glmConstructor,
             normalizationPhotonBroadcast,

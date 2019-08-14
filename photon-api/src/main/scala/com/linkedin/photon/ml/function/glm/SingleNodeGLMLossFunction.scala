@@ -149,17 +149,17 @@ object SingleNodeGLMLossFunction {
   def apply(
       configuration: GLMOptimizationConfiguration,
       singleLossFunction: PointwiseLossFunction,
-      priorGeneralizedLinearModel: GeneralizedLinearModel,
+      priorGeneralizedLinearModel: Option[GeneralizedLinearModel] = None,
       isIncrementalLearningEnabled: Boolean = false): SingleNodeGLMLossFunction = {
 
     val regularizationContext = configuration.regularizationContext
     val regularizationWeight = configuration.regularizationWeight
 
     if (isIncrementalLearningEnabled) {
-      new SingleNodeGLMLossFunction(singleLossFunction) with PriorDistribution {
+      new SingleNodeGLMLossFunction(singleLossFunction) with PriorDistributionTwiceDiff {
         _l1RegWeight = regularizationContext.getL1RegularizationWeight(regularizationWeight)
         _l2RegWeight = regularizationContext.getL2RegularizationWeight(regularizationWeight)
-        _previousCoefficients = priorGeneralizedLinearModel.coefficients
+        _previousCoefficients = priorGeneralizedLinearModel.get.coefficients
       }
     } else {
       regularizationContext.regularizationType match {

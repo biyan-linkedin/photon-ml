@@ -16,10 +16,10 @@ package com.linkedin.photon.ml.function.glm
 
 import org.testng.Assert._
 import org.testng.annotations.{DataProvider, Test}
-
 import com.linkedin.photon.ml.function.ObjectiveFunction
 import com.linkedin.photon.ml.optimization.{OptimizerConfig, OptimizerType}
 import com.linkedin.photon.ml.optimization.game.{CoordinateOptimizationConfiguration, FixedEffectOptimizationConfiguration, RandomEffectOptimizationConfiguration}
+import com.linkedin.photon.ml.supervised.model.GeneralizedLinearModel
 
 /**
  * Unit tests for [[GLMLossFunction]].
@@ -47,14 +47,14 @@ class GLMLossFunctionTest {
   @Test(dataProvider = "coordinateOptimizationProblemProvider")
   def testBuildFactory(coordinateOptConfig: CoordinateOptimizationConfiguration): Unit = {
 
-    val objectiveFunction = GLMLossFunction.buildFactory(LOSS_FUNCTION, TREE_AGGREGATE_DEPTH)(coordinateOptConfig)()
+    val objectiveFunction = GLMLossFunction.buildFactory(LOSS_FUNCTION, TREE_AGGREGATE_DEPTH)(coordinateOptConfig)
 
     coordinateOptConfig match {
       case _: FixedEffectOptimizationConfiguration =>
-        assertTrue(objectiveFunction.isInstanceOf[DistributedGLMLossFunction])
+        assertTrue(objectiveFunction.isInstanceOf[GeneralizedLinearModel => DistributedGLMLossFunction])
 
       case _: RandomEffectOptimizationConfiguration =>
-        assertTrue(objectiveFunction.isInstanceOf[SingleNodeGLMLossFunction])
+        assertTrue(objectiveFunction.isInstanceOf[GeneralizedLinearModel => SingleNodeGLMLossFunction])
 
       case _ =>
         assertTrue(false)
